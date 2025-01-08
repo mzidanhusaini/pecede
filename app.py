@@ -1,5 +1,4 @@
 import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
@@ -14,37 +13,65 @@ st.set_page_config(page_title="Flower Classification", layout="centered")
 # Title of the app
 st.title("Flower Classification App")
 
-# Load the flower dataset directory
+# Define the path to the dataset directory
 base_dir = '/content/drive/MyDrive/flowers/'
 
-# Create a simple function to display some sample images from the dataset
-def show_sample_images():
-    dirs = os.listdir(base_dir)
-    count = 0
-    for dir in dirs:
-        files = list(os.listdir(base_dir + dir))
-        count += len(files)
-    st.write(f'Total images in the flower dataset: {count}')
-    
-    flower_names = os.listdir(base_dir)  # Assuming flower directories match the flower names
-    st.write(f"Flower categories: {flower_names}")
+# Function to upload and display sample images
+def show_sample_images(directory):
+    try:
+        dirs = os.listdir(directory)
+        count = 0
+        for dir in dirs:
+            files = list(os.listdir(directory + dir))
+            count += len(files)
+        st.write(f'Total images in the flower dataset: {count}')
 
-    # Show some sample images
-    st.write("### Sample Images from Dataset")
-    sample_images = []
-    for dir in flower_names:
-        dir_path = os.path.join(base_dir, dir)
-        files = list(os.listdir(dir_path))[:3]  # Take 3 images from each category
-        sample_images.extend([os.path.join(dir_path, file) for file in files])
-    
-    cols = st.columns(3)
-    for idx, image_path in enumerate(sample_images):
-        with cols[idx % 3]:
-            img = load_img(image_path, target_size=(180, 180))
-            st.image(img, caption=flower_names[idx % len(flower_names)])
+        flower_names = os.listdir(directory)  # Assuming flower directories match the flower names
+        st.write(f"Flower categories: {flower_names}")
 
-# Show sample images
-show_sample_images()
+        # Show some sample images
+        st.write("### Sample Images from Dataset")
+        sample_images = []
+        for dir in flower_names:
+            dir_path = os.path.join(directory, dir)
+            files = list(os.listdir(dir_path))[:3]  # Take 3 images from each category
+            sample_images.extend([os.path.join(dir_path, file) for file in files])
+
+        cols = st.columns(3)
+        for idx, image_path in enumerate(sample_images):
+            with cols[idx % 3]:
+                img = load_img(image_path, target_size=(180, 180))
+                st.image(img, caption=flower_names[idx % len(flower_names)])
+    except Exception as e:
+        st.error(f"Error loading images: {str(e)}")
+
+# Check if dataset exists, else prompt user to upload dataset
+if os.path.exists(base_dir):
+    st.write("Dataset found on Google Drive.")
+    show_sample_images(base_dir)
+else:
+    st.write("Dataset not found on Google Drive.")
+    st.write("Please upload your dataset below:")
+
+    # Upload dataset (only allow folder structure similar to the one in base_dir)
+    uploaded_folder = st.file_uploader("Upload a folder of flower images (zip file)", type=["zip"])
+
+    if uploaded_folder is not None:
+        # Save uploaded zip file to disk
+        zip_path = "/tmp/flowers.zip"
+        with open(zip_path, "wb") as f:
+            f.write(uploaded_folder.getbuffer())
+
+        # Unzip the folder and update base_dir path
+        import zipfile
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall("/tmp/flowers")
+        
+        # Now the path is updated to where the folder was extracted
+        base_dir = "/tmp/flowers/"
+
+        # Show sample images from the uploaded folder
+        show_sample_images(base_dir)
 
 # Load the dataset
 img_size = 180
@@ -118,7 +145,6 @@ uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg
 
 if uploaded_file is not None:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-    st.write("")
     st.write("Classifying...")
 
     # Call the classify function and display result
