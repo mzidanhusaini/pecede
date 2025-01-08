@@ -1,5 +1,0 @@
-os
-numpy
-streamlit
-matplotlib
-tensorflow
