@@ -125,6 +125,13 @@ model = Sequential([
 
 model.summary()
 
+# Compile the model before training
+model.compile(
+    optimizer='adam',  # Optimizer choice, 'adam' is a good default
+    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),  # For multi-class classification
+    metrics=['accuracy']  # Metric to track during training
+)
+
 # Train the model
 history = model.fit(train_ds, epochs=15, validation_data=val_ds)
 
