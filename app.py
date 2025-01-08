@@ -1,159 +1,168 @@
 import os
 import zipfile
-import matplotlib.pyplot as plt
 import numpy as np
-import streamlit as st
 import tensorflow as tf
-from tensorflow.keras import layers
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img
+import streamlit as st
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.models import load_model
+from PIL import Image
+import io
 
-# Set up the Streamlit page configuration
-st.set_page_config(page_title="Flower Classification", layout="centered")
+# Sidebar untuk memilih halaman
+menu = st.sidebar.radio("Pilih Halaman", ["Beranda", "Kamera", "Unggah Gambar", "Riwayat"])
 
-# Title of the app
-st.title("Flower Classification App")
-
-# Define the path to the dataset directory
-base_dir = '/content/drive/MyDrive/flowers/'
-
-# Function to upload and display sample images
-def show_sample_images(directory):
-    try:
-        dirs = os.listdir(directory)
-        count = 0
-        for dir in dirs:
-            dir_path = os.path.join(directory, dir)
-            if os.path.isdir(dir_path):  # Ensure it's a directory, not a file
-                files = os.listdir(dir_path)
-                count += len(files)
-        st.write(f'Total images in the flower dataset: {count}')
-
-        flower_names = [d for d in dirs if os.path.isdir(os.path.join(directory, d))]  # Filter directories
-        st.write(f"Flower categories: {flower_names}")
-
-        # Show some sample images
-        st.write("### Sample Images from Dataset")
-        sample_images = []
-        for dir in flower_names:
-            dir_path = os.path.join(directory, dir)
-            files = [f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, f))][:3]  # Only select files
-            sample_images.extend([os.path.join(dir_path, file) for file in files])
-
-        # Display sample images
-        cols = st.columns(3)
-        for idx, image_path in enumerate(sample_images):
-            with cols[idx % 3]:
-                img = load_img(image_path, target_size=(180, 180))
-                st.image(img, caption=flower_names[idx % len(flower_names)])
-    except Exception as e:
-        st.error(f"Error loading images: {str(e)}")
-
-# Check if dataset exists on Google Drive, or else upload dataset manually
-if os.path.exists(base_dir):
-    st.write("Dataset found on Google Drive.")
-    show_sample_images(base_dir)
+# Memuat model yang sudah dilatih
+model_path = 'model_flower_classification.h5'  # Specify your model file path
+if not os.path.exists(model_path):
+    st.error(f"Model tidak ditemukan di {model_path}")
 else:
-    st.write("Dataset not found in Google Drive.")
-    st.write("Please upload your dataset below:")
+    model = load_model(model_path, compile=False)
 
-    # Upload dataset (only allow folder structure similar to the one in base_dir)
-    uploaded_folder = st.file_uploader("Upload a folder of flower images (zip file)", type=["zip"])
+    # Memuat nama kelas dari model
+    classes = ['Daisy', 'Dandelion', 'Rose', 'Sunflower', 'Tulip']  # Update these classes to match your dataset
 
-    if uploaded_folder is not None:
-        # Save uploaded zip file to disk in the current directory
-        zip_path = "flowers.zip"  # Save in the current directory
-        with open(zip_path, "wb") as f:
-            f.write(uploaded_folder.getbuffer())
+    # Fungsi untuk memproses gambar input
+    def preprocess_image(img):
+        img = img.resize((180, 180))  # Adjust image size as required
+        img_array = np.array(img) / 255.0  # Normalize the image
+        img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+        return img_array
 
-        # Unzip the folder and update base_dir path
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(base_dir)  # Extract to base_dir directly
-        
-        st.write(f"Dataset extracted to {base_dir}")
-        show_sample_images(base_dir)
+    # Fungsi untuk memprediksi gambar
+    def predict_image(img_array):
+        preds = model.predict(img_array)  # Predict with the model
+        class_idx = np.argmax(preds, axis=1)  # Get class with the highest probability
+        return classes[class_idx[0]], preds[0][class_idx[0]]  # Return class and confidence
 
-# Load the dataset
-img_size = 180
-batch = 32
-train_ds = tf.keras.utils.image_dataset_from_directory(
-    base_dir,
-    seed=123,
-    validation_split=0.2,
-    subset='training',
-    batch_size=batch,
-    image_size=(img_size, img_size)
-)
+    # Menyimpan riwayat ke session state jika belum ada
+    if "history" not in st.session_state:
+        st.session_state.history = []
 
-val_ds = tf.keras.utils.image_dataset_from_directory(
-    base_dir,
-    seed=123,
-    validation_split=0.2,
-    subset='validation',
-    batch_size=batch,
-    image_size=(img_size, img_size)
-)
+    # Header dengan gambar dan deskripsi
+    st.image("flower_classification_logo.png", width=150)  # Replace with your logo
+    st.title("Klasifikasi Jenis Bunga")
 
-flower_names = train_ds.class_names
+    if menu == "Beranda":
+        st.markdown("""
+        Aplikasi klasifikasi jenis bunga ini menggunakan kecerdasan buatan (AI) untuk membantu mengidentifikasi jenis bunga
+        berdasarkan gambar yang diunggah oleh pengguna. Dengan aplikasi ini, Anda dapat mengupload gambar bunga atau mengambil
+        gambar langsung menggunakan kamera untuk mengetahui jenis bunga tersebut.
+        """, unsafe_allow_html=True)
 
-# Data Preprocessing and Augmentation
-AUTOTUNE = tf.data.AUTOTUNE
-train_ds = train_ds.cache().shuffle(1000).prefetch(buffer_size=AUTOTUNE)
-val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+    elif menu == "Kamera":
+        # Menampilkan pilihan untuk mengambil gambar menggunakan kamera
+        camera_input = st.camera_input("Ambil gambar untuk diprediksi")
 
-data_augmentation = Sequential([
-    layers.RandomFlip("horizontal", input_shape=(img_size, img_size, 3)),
-    layers.RandomRotation(0.1),
-    layers.RandomZoom(0.1)
-])
+        if camera_input is not None:
+            # Menampilkan gambar yang diambil
+            st.image(camera_input, caption="Gambar yang diambil.", use_container_width=True)
 
-# Define the model architecture
-model = Sequential([
-    data_augmentation,
-    layers.Rescaling(1./255),
-    layers.Conv2D(16, 3, padding='same', activation='relu'),
-    layers.MaxPooling2D(),
-    layers.Conv2D(32, 3, padding='same', activation='relu'),
-    layers.MaxPooling2D(),
-    layers.Conv2D(64, 3, padding='same', activation='relu'),
-    layers.MaxPooling2D(),
-    layers.Dropout(0.2),
-    layers.Flatten(),
-    layers.Dense(128, activation='relu'),
-    layers.Dense(5)  # Number of classes
-])
+            # Memproses gambar
+            try:
+                img = Image.open(camera_input)
+            except Exception as e:
+                st.error(f"Terjadi kesalahan saat memproses gambar: {e}")
+                st.stop()  # Berhenti jika ada kesalahan dalam memproses gambar
 
-model.summary()
+            img_array = preprocess_image(img)
 
-# Compile the model before training
-model.compile(
-    optimizer='adam',  # Optimizer choice, 'adam' is a good default
-    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),  # For multi-class classification
-    metrics=['accuracy']  # Metric to track during training
-)
+            # Prediksi
+            label, confidence = predict_image(img_array)
+            st.write(f"Prediksi: {label}")
+            st.write(f"Probabilitas: {confidence:.2f}")
 
-# Train the model
-history = model.fit(train_ds, epochs=15, validation_data=val_ds)
+            # Menyimpan gambar dan hasil prediksi ke riwayat
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format="PNG")
+            img_bytes = img_bytes.getvalue()
+            st.session_state.history.append({
+                "image": img_bytes,
+                "label": label,
+                "confidence": confidence
+            })
 
-# Function to classify uploaded images
-def classify_images(image):
-    input_image = tf.keras.utils.load_img(image, target_size=(180, 180))
-    input_image_array = tf.keras.utils.img_to_array(input_image)
-    input_image_exp_dim = tf.expand_dims(input_image_array, 0)
+    elif menu == "Unggah Gambar":
+        # Menampilkan fitur unggah gambar
+        uploaded_file = st.file_uploader("Pilih gambar untuk diprediksi", type=["jpg", "jpeg", "png"])
 
-    predictions = model.predict(input_image_exp_dim)
-    result = tf.nn.softmax(predictions[0])
-    outcome = f"The image belongs to {flower_names[np.argmax(result)]} with a score of {np.max(result)*100:.2f}%"
-    return outcome
+        if uploaded_file is not None:
+            # Menampilkan gambar yang diunggah
+            st.image(uploaded_file, caption="Gambar yang diunggah.", use_container_width=True)
 
-# Streamlit interface for user input
-st.write("### Upload an Image for Classification")
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
+            # Memproses gambar
+            try:
+                img = Image.open(uploaded_file)
+            except Exception as e:
+                st.error(f"Terjadi kesalahan saat memproses gambar: {e}")
+                st.stop()  # Berhenti jika ada kesalahan dalam memproses gambar
 
-if uploaded_file is not None:
-    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-    st.write("Classifying...")
+            img_array = preprocess_image(img)
 
-    # Call the classify function and display result
-    outcome = classify_images(uploaded_file)
-    st.write(outcome)
+            # Prediksi
+            label, confidence = predict_image(img_array)
+            st.write(f"Prediksi: {label}")
+            st.write(f"Probabilitas: {confidence:.2f}")
+
+            # Menyimpan gambar dan hasil prediksi ke riwayat
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format="PNG")
+            img_bytes = img_bytes.getvalue()
+            st.session_state.history.append({
+                "image": img_bytes,
+                "label": label,
+                "confidence": confidence
+            })
+
+    elif menu == "Riwayat":
+        # Menampilkan riwayat hasil prediksi
+        if len(st.session_state.history) == 0:
+            st.write("Tidak ada riwayat prediksi.")
+        else:
+            st.write("Riwayat Prediksi Bunga:")
+
+            # Loop untuk menampilkan setiap entri dalam riwayat
+            for i, entry in enumerate(st.session_state.history):
+                # Menampilkan gambar dari riwayat
+                st.image(entry["image"], caption=f"Prediksi {i+1}: {entry['label']} (Probabilitas: {entry['confidence']:.2f})", use_container_width=True)
+                st.write(f"**Prediksi**: {entry['label']}")
+                st.write(f"**Probabilitas**: {entry['confidence']:.2f}")
+
+                # Menambahkan tombol hapus
+                if st.button(f"Hapus Prediksi {i+1}", key=f"hapus_{i}"):
+                    # Menghapus entri dari riwayat
+                    st.session_state.history.pop(i)
+                
+                st.markdown("---")
+
+# Menambahkan CSS kustom untuk mempercantik tampilan
+st.markdown("""
+    <style>
+        .css-1d391kg {
+            background-color: #6495ED;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .css-ffhzg2 {
+            font-size: 1.25em;
+            color: #333;
+        }
+        .stButton>button {
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .stButton>button:hover {
+            background-color: #45a049;
+        }
+        .stImage>img {
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+""", unsafe_allow_html=True)
