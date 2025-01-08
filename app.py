@@ -1,4 +1,5 @@
 import os
+import zipfile
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
@@ -22,11 +23,13 @@ def show_sample_images(directory):
         dirs = os.listdir(directory)
         count = 0
         for dir in dirs:
-            files = list(os.listdir(directory + dir))
-            count += len(files)
+            dir_path = os.path.join(directory, dir)
+            if os.path.isdir(dir_path):  # Ensure it's a directory, not a file
+                files = [f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, f))]  # List files only
+                count += len(files)
         st.write(f'Total images in the flower dataset: {count}')
 
-        flower_names = os.listdir(directory)  # Assuming flower directories match the flower names
+        flower_names = [d for d in dirs if os.path.isdir(os.path.join(directory, d))]  # Filter directories
         st.write(f"Flower categories: {flower_names}")
 
         # Show some sample images
@@ -34,9 +37,10 @@ def show_sample_images(directory):
         sample_images = []
         for dir in flower_names:
             dir_path = os.path.join(directory, dir)
-            files = list(os.listdir(dir_path))[:3]  # Take 3 images from each category
+            files = [f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, f))][:3]  # Only select files
             sample_images.extend([os.path.join(dir_path, file) for file in files])
 
+        # Display sample images
         cols = st.columns(3)
         for idx, image_path in enumerate(sample_images):
             with cols[idx % 3]:
@@ -45,32 +49,28 @@ def show_sample_images(directory):
     except Exception as e:
         st.error(f"Error loading images: {str(e)}")
 
-# Check if dataset exists, else prompt user to upload dataset
+# Check if dataset exists on Google Drive, or else upload dataset manually
 if os.path.exists(base_dir):
     st.write("Dataset found on Google Drive.")
     show_sample_images(base_dir)
 else:
-    st.write("Dataset not found on Google Drive.")
+    st.write("Dataset not found in Google Drive.")
     st.write("Please upload your dataset below:")
 
     # Upload dataset (only allow folder structure similar to the one in base_dir)
     uploaded_folder = st.file_uploader("Upload a folder of flower images (zip file)", type=["zip"])
 
     if uploaded_folder is not None:
-        # Save uploaded zip file to disk
-        zip_path = "/tmp/flowers.zip"
+        # Save uploaded zip file to disk in the current directory
+        zip_path = "flowers.zip"  # Save in the current directory
         with open(zip_path, "wb") as f:
             f.write(uploaded_folder.getbuffer())
 
         # Unzip the folder and update base_dir path
-        import zipfile
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall("/tmp/flowers")
+            zip_ref.extractall(base_dir)  # Extract to base_dir directly
         
-        # Now the path is updated to where the folder was extracted
-        base_dir = "/tmp/flowers/"
-
-        # Show sample images from the uploaded folder
+        st.write(f"Dataset extracted to {base_dir}")
         show_sample_images(base_dir)
 
 # Load the dataset
