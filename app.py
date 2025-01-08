@@ -1,9 +1,7 @@
 import os
-import zipfile
 import numpy as np
 import tensorflow as tf
 import streamlit as st
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.models import load_model
 from PIL import Image
 import io
@@ -23,8 +21,8 @@ else:
 
     # Fungsi untuk memproses gambar input
     def preprocess_image(img):
-        img = img.resize((180, 180))  # Adjust image size as required
-        img_array = np.array(img) / 255.0  # Normalize the image
+        img = img.resize((180, 180))  # Resize image to match model input size
+        img_array = np.array(img) / 255.0  # Normalize image
         img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
         return img_array
 
@@ -131,6 +129,7 @@ else:
                 if st.button(f"Hapus Prediksi {i+1}", key=f"hapus_{i}"):
                     # Menghapus entri dari riwayat
                     st.session_state.history.pop(i)
+                    st.experimental_rerun()  # Rerun the app to reflect the changes
                 
                 st.markdown("---")
 
