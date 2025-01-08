@@ -12,7 +12,7 @@ import io
 menu = st.sidebar.radio("Pilih Halaman", ["Beranda", "Kamera", "Unggah Gambar", "Riwayat"])
 
 # Memuat model yang sudah dilatih
-model_path = 'model_flower_classification.h5'  # Specify your model file path
+model_path = 'disease.h5'  # Specify your model file path
 if not os.path.exists(model_path):
     st.error(f"Model tidak ditemukan di {model_path}")
 else:
